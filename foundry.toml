@@ -5,3 +5,11 @@ libs = ["lib"]
 auto_detect_remappings = false # recursive auto-detection of remappings
 
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+[invariant]
+runs = 256
+depth = 64
+fail_on_revert = true   # the handler only sends valid actions, so any revert is a bug
+
+[lint]
+ignore = ["test/mock/*.sol"]   # Chainlink's standard aggregator mock

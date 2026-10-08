@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: MIT
-pragma solidity >= 0.8.0;
+pragma solidity >=0.8.0;
 
-import { MockV3Aggregator } from "../test/mock/MockV3Aggregator.sol";
-import { Script } from "forge-std/Script.sol";
-import { MockERC20 } from "../test/mock/MockERC20.sol";
+import {MockV3Aggregator} from "../test/mock/MockV3Aggregator.sol";
+import {Script} from "forge-std/Script.sol";
+import {MockERC20} from "../test/mock/MockERC20.sol";
 
 contract HelperConfig is Script {
     NetworkConfig public activeNetworkConfig;

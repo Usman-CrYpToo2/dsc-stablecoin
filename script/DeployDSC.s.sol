@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >= 0.8.0;
+pragma solidity >=0.8.0;
 
-import { Script } from "forge-std/Script.sol";
-import { HelperConfig } from "./HelperConfig.s.sol";
-import { DStablecoin } from "../src/DStablecoin.sol";
-import { DSCEngine } from "../src/DSCEngine.sol";
+import {Script} from "forge-std/Script.sol";
+import {HelperConfig} from "./HelperConfig.s.sol";
+import {DStablecoin} from "../src/DStablecoin.sol";
+import {DSCEngine} from "../src/DSCEngine.sol";
 
 contract DeployDSC is Script {
     address[] public tokenAddresses;
