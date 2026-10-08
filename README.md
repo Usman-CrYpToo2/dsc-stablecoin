@@ -4,9 +4,6 @@
 
 An overcollateralized, USD-pegged stablecoin backed by WETH and WBTC and priced with Chainlink feeds. Users lock collateral to mint DSC; positions that fall below the required collateralization can be liquidated by any caller for a bonus.
 
-> [!WARNING]
-> Educational code. Unaudited, with known design limitations documented under [Security](#security).
-
 ## Parameters
 
 | Parameter | Value |
@@ -66,6 +63,10 @@ A self-review found 7 issues. Three were fixed, including a critical bug that pr
 ## Acknowledgements
 
 Protocol design based on the Cyfrin Updraft *Advanced Foundry* course. Implementation, fixes, and the test suite in this repository are original.
+
+## Safety
+
+Not audited by a third party. Provided as is, without warranty.
 
 ## License
 
