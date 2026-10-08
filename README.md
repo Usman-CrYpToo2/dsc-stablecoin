@@ -1,6 +1,6 @@
 # DSC
 
-[![CI](https://github.com/Usman-CrYpToo2/Stable-Coin/actions/workflows/test.yml/badge.svg)](https://github.com/Usman-CrYpToo2/Stable-Coin/actions/workflows/test.yml)
+[![CI](https://github.com/Usman-CrYpToo2/dsc-stablecoin/actions/workflows/test.yml/badge.svg)](https://github.com/Usman-CrYpToo2/dsc-stablecoin/actions/workflows/test.yml)
 
 An overcollateralized, USD-pegged stablecoin backed by WETH and WBTC and priced with Chainlink feeds. Users lock collateral to mint DSC; positions that fall below the required collateralization can be liquidated by any caller for a bonus.
 
@@ -52,8 +52,8 @@ Each invariant runs 256 sequences of depth 64 (16,384 calls) with `fail_on_rever
 Requires [Foundry](https://book.getfoundry.sh/getting-started/installation).
 
 ```bash
-git clone --recurse-submodules https://github.com/Usman-CrYpToo2/Stable-Coin.git
-cd Stable-Coin
+git clone --recurse-submodules https://github.com/Usman-CrYpToo2/dsc-stablecoin.git
+cd dsc-stablecoin
 forge test
 ```
 
@@ -63,7 +63,7 @@ The suite contains 22 unit tests and 3 invariants. CI runs formatting, build, an
 
 ### Resolved
 
-Identified while building the test suite and fixed in [`0468135`](https://github.com/Usman-CrYpToo2/Stable-Coin/commit/0468135).
+Identified while building the test suite and fixed in [`0468135`](https://github.com/Usman-CrYpToo2/dsc-stablecoin/commit/0468135).
 
 | ID | Severity | Title |
 |---|---|---|
