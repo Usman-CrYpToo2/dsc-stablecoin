@@ -1,30 +1,55 @@
-# DSC: Overcollateralized Stablecoin
+# DSC
 
 [![CI](https://github.com/Usman-CrYpToo2/Stable-Coin/actions/workflows/test.yml/badge.svg)](https://github.com/Usman-CrYpToo2/Stable-Coin/actions/workflows/test.yml)
 
-A decentralized stablecoin pegged to $1, backed by WETH and WBTC, in the style of MakerDAO's DAI. Users lock crypto as collateral and mint DSC against it. If a position becomes undercollateralized, anyone can liquidate it for a bonus.
+An overcollateralized, USD-pegged stablecoin backed by WETH and WBTC and priced with Chainlink feeds. Users lock collateral to mint DSC; positions that fall below the required collateralization can be liquidated by any caller for a bonus.
 
-Built while following the Cyfrin Updraft advanced Foundry course. The design follows the course; the implementation, the bug fixes, and the test suite below are my own.
+> [!WARNING]
+> Educational code. Unaudited, with known design limitations documented under [Security](#security).
 
-## How it works
+## Parameters
 
-| Rule | Value |
+| Parameter | Value |
 |---|---|
-| Collateral | WETH, WBTC, priced with Chainlink feeds |
-| Minimum collateral | 200% of the DSC you mint (50% liquidation threshold) |
-| Health factor | `(collateral value × 50%) / DSC minted`. Below 1, the position can be liquidated |
+| Collateral | WETH, WBTC |
+| Price source | Chainlink, via [`OracleLib`](src/OracleLib.sol) |
+| Liquidation threshold | 50% (200% minimum collateralization) |
 | Liquidation bonus | 10% of the debt covered, paid in collateral |
-| Stale price guard | Every price read reverts if the feed has not updated in 3 hours, or reports zero or less |
+| Oracle timeout | 3 hours |
 
-The main flows, all in [`DSCEngine`](src/DSCEngine.sol):
+The health factor of a position is `collateralUsd × LIQUIDATION_THRESHOLD / 100 × 1e18 / debt`. Positions with a health factor below `1e18` are liquidatable.
 
-- `depositCollateralAndMintDsc`: lock collateral and mint in one transaction
-- `redeemCollateralForDsc`: burn DSC and withdraw collateral in one transaction
-- `liquidate`: repay part or all of someone's unhealthy debt and receive their collateral plus 10%
+## Architecture
 
-[`DStablecoin`](src/DStablecoin.sol) is the ERC-20 token. Only the engine can mint or burn it.
+| Contract | Responsibility |
+|---|---|
+| [`DSCEngine`](src/DSCEngine.sol) | Collateral accounting, minting, burning, redemption, liquidation, and health factor enforcement |
+| [`DStablecoin`](src/DStablecoin.sol) | ERC-20 token; mint and burn restricted to the engine (owner) |
+| [`OracleLib`](src/OracleLib.sol) | Wraps `latestRoundData`; reverts on stale or non-positive answers |
 
-## Testing
+Primary entry points on `DSCEngine`:
+
+| Function | Description |
+|---|---|
+| `depositCollateralAndMintDsc` | Deposits collateral and mints DSC atomically |
+| `redeemCollateralForDsc` | Burns DSC and withdraws collateral atomically |
+| `liquidate` | Repays part of an unhealthy position's debt in exchange for its collateral plus the bonus |
+
+## Invariants
+
+Verified with stateful fuzzing in [`test/invariant`](test/invariant). With prices held constant, across any sequence of deposits, mints, burns, and redemptions from multiple actors:
+
+| ID | Property |
+|---|---|
+| I-1 | Total collateral value held by the engine is at least the DSC total supply |
+| I-2 | No actor's health factor falls below `1e18` |
+| I-3 | Price getters never revert |
+
+Each invariant runs 256 sequences of depth 64 (16,384 calls) with `fail_on_revert` enabled.
+
+## Usage
+
+Requires [Foundry](https://book.getfoundry.sh/getting-started/installation).
 
 ```bash
 git clone --recurse-submodules https://github.com/Usman-CrYpToo2/Stable-Coin.git
@@ -32,34 +57,51 @@ cd Stable-Coin
 forge test
 ```
 
-- **22 unit tests** ([`test/unit`](test/unit)) covering every flow: deposits, minting up to the limit, burning, redeeming, liquidation with the bonus, stale and invalid prices, and access control.
-- **3 invariants** ([`test/invariant`](test/invariant)), fuzzed over 256 runs of 64 random actions each (16,384 calls per invariant). A handler drives random deposits, mints, burns and redemptions from three users, and after every call the tests check that:
-  1. the protocol always holds more collateral value than the DSC in circulation,
-  2. no user is ever left with a health factor below 1,
-  3. the price getters never revert.
+The suite contains 22 unit tests and 3 invariants. CI runs formatting, build, and tests on every push.
 
-## Bugs found while writing the tests
+## Security
 
-The original version had no real tests. Writing them found these, all now fixed:
+### Resolved
 
-| Bug | Impact |
-|---|---|
-| `DStablecoin.mint` checked that the **minter** already held the amount being minted, a check copied from `burn` | **Minting never worked.** The engine holds no DSC, so every mint reverted. The stablecoin could not be used at all. |
-| Test imports used the wrong letter case (`MockV3Aggregator.sol`, `Console.sol`) | Tests only compiled on case-insensitive systems like Windows and macOS. CI on Linux could not build. |
-| Oracle prices were cast to `uint256` without checking they were positive | A zero or negative answer from a feed would wrap into an enormous price. `OracleLib` now rejects it. |
-| `transferFrom` result unchecked when burning | Safe with this token, but now checked anyway. |
-| The mock token used 8 decimals | The engine's price math assumes 18, so the mock did not match real WETH. |
+Identified while building the test suite and fixed in [`0468135`](https://github.com/Usman-CrYpToo2/Stable-Coin/commit/0468135).
 
-## Known limitations
+| ID | Severity | Title |
+|---|---|---|
+| C-01 | Critical | `DStablecoin.mint` reverts unless the minter already holds the amount |
+| M-01 | Medium | Non-positive oracle answers cast to `uint256` |
+| L-01 | Low | `transferFrom` return value unchecked in `_burnDsc` |
 
-These are design limits I would raise in an audit. They are documented, not fixed, to keep the design aligned with the course.
+**C-01.** `mint` checked `balanceOf(msg.sender) >= amount`, a check carried over from `burn`. The engine holds no DSC, so every call to `mintDsc` reverted and the protocol could not issue its token. *Fix:* removed the balance check.
 
-- **Positions below 110% collateral cannot be liquidated.** Liquidating the full debt needs the debt's value plus a 10% bonus in collateral, which the user no longer has. The bad debt stays in the system. A test, `test_knownLimitation_cannotLiquidateBelow110Percent`, shows this.
-- **Assumes 18-decimal collateral.** The price math treats every token as 18 decimals. Real WBTC has 8, so it would be undervalued by a factor of 10^10. Each token's decimals should be read and normalized.
-- **A stale oracle freezes everything.** Once a feed is more than 3 hours old, every action that reads its price reverts, including liquidations, exactly when they may be needed most.
-- **No bad debt handling or reserve.** If collateral falls faster than liquidators can act, nothing covers the shortfall.
-- **The invariants hold prices constant.** Price movements are covered by the unit tests, not the fuzzer.
+**M-01.** Prices were cast with `uint256(price)` without validation. A zero answer valued all collateral at zero, making every position liquidatable; a negative answer wrapped to a value near `2^256` and caused arithmetic reverts. *Fix:* `OracleLib` reverts with `Oracle_invalidPrice` when `answer <= 0`.
+
+**L-01.** The burn path ignored the return value of `transferFrom`. Not exploitable with the current token, but inconsistent with the other transfer paths. *Fix:* revert on `false`.
+
+### Known Limitations
+
+Design-level issues, acknowledged and not addressed in this implementation.
+
+| ID | Severity | Title |
+|---|---|---|
+| H-01 | High | Positions below 110% collateralization cannot be fully liquidated |
+| H-02 | High | Price math assumes 18-decimal collateral |
+| M-02 | Medium | A stale oracle halts liquidations |
+| M-03 | Medium | No mechanism to absorb bad debt |
+
+**H-01.** A full liquidation transfers collateral worth the debt plus 10%. Below 110% collateralization, the position does not hold that much, so `_redeemCollateral` underflows and the liquidation reverts. Demonstrated by `test_knownLimitation_cannotLiquidateBelow110Percent`.
+
+**H-02.** `getUsdValue` and `getTokenAmountFromUsd` treat every token as 18 decimals. WBTC uses 8, so it would be undervalued by a factor of `1e10`. Token decimals should be read and normalized per collateral.
+
+**M-02.** `OracleLib` reverts on stale data, and every pricing path depends on it. During an oracle outage, liquidations are blocked when they may be most needed.
+
+**M-03.** There is no reserve, auction, or socialization mechanism. Losses from positions that cannot be liquidated in time remain unbacked supply.
+
+The invariant suite holds prices constant; price movement is covered by unit tests only.
+
+## Acknowledgements
+
+Protocol design based on the Cyfrin Updraft *Advanced Foundry* course. Implementation, fixes, and the test suite in this repository are original.
 
 ## License
 
-MIT, see [LICENSE](LICENSE).
+MIT, see [`LICENSE`](LICENSE).
